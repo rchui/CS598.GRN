@@ -6,6 +6,7 @@ Main body of grn process.
 import sys
 import csv
 import argparse
+import pprint
 import multiprocessing
 import itertools
 from sklearn import linear_model
@@ -13,48 +14,23 @@ import numpy as np
 
 FLAGS = None
 
-def get_expression():
-    """ Reads in the expression data from file.
+def build_set():
+    samples_set = None
+    with open(FLAGS.expression) as exp_file:
+        samples_set = set([element for element in exp_file.readline().split('\t')][1:])
+    return samples_set
 
-    Args:
-        None
-
-    Returns:
-        expression_data: gene  expression data
-        expression_names: gene expression names
-    """
-    with open(FLAGS.expression) as expression_file:
-        tsv_in = csv.reader(expression_file, delimiter='\t')
-        tsv_in = list(itertools.islice(tsv_in, 100))
-        expression_data = np.asarray([np.asarray([element.replace('NA', '0') for element in row]) for row in tsv_in])
-        expression_data = np.delete(expression_data, 0, 0)
-        expression_names = np.asarray([element[0] for element in expression_data])
-        expression_data = np.delete(expression_data, 0, 1).astype(float)
-    return expression_data, expression_names
-
-def get_outcome():
-    """ Reads in the outcome data from file.
-
-    Args:
-        None
-
-    Returns:
-        outcome_data: phenotype outcome data
-    """
-    with open(FLAGS.outcome) as outcome_file:
-        tsv_in = csv.reader(outcome_file, delimiter='\t')
-        outcome_data = np.asarray([row[1] for row in tsv_in][1:])
-        return outcome_data
+def build_dict(sample_set):
+    out_dict = None
+    with open(FLAGS.outcome) as out_file:
+        out_dict = {row[0]: 1 if row[18] == 'glioblastoma multiforme' else 0 for row in csv.reader(out_file, delimiter='\t') if row[0] in sample_set}
+    return out_dict
 
 def main():
-    """ Main body of the grn process. """
-    print()
-    expression_data, expression_names = get_expression()
-    outcome_data = get_outcome()
+    sample_set = build_set()
+    out_dict = build_dict(sample_set)
 
-    print(expression_names, '\n')
-    print(expression_data, '\n')
-    print(outcome_data, '\n')
+
 
 if __name__ == '__main__':
     PARSER = argparse.ArgumentParser()
