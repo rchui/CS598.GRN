@@ -43,11 +43,9 @@ def get_expression(sample_set):
         for row in exp_data:
             exp_samples_copy = copy.deepcopy(exp_samples)
             _, row = (list(t) for t in zip(*sorted(zip(exp_samples_copy, row))))
-            exp_data_out.append(row)
+            exp_data_out.append(row[:-1])
+        print(len(exp_data_out[0]))
         exp_data_out = np.transpose(np.asarray(exp_data_out))
-        # print(exp_data_out, '\n')
-        # print(exp_samples, '\n')
-        # print(exp_names, '\n')
 
         return exp_data_out, exp_names
 
@@ -60,6 +58,7 @@ def main():
     print(out_data, '\n')
     print(exp_data, '\n')
     print(exp_names, '\n')
+    print(len(out_data), len(exp_data[0]), len(exp_data), len(exp_names))
 
 if __name__ == '__main__':
     PARSER = argparse.ArgumentParser()
