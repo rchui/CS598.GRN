@@ -44,8 +44,7 @@ def get_expression(sample_set):
             exp_samples_copy = copy.deepcopy(exp_samples)
             _, row = (list(t) for t in zip(*sorted(zip(exp_samples_copy, row))))
             exp_data_out.append(row[:-1])
-        print(len(exp_data_out[0]))
-        exp_data_out = np.transpose(np.asarray(exp_data_out))
+        exp_data_out = np.asarray(exp_data_out)
 
         return exp_data_out, exp_names
 
