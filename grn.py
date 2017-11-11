@@ -39,7 +39,8 @@ def get_outcome():
     Returns:
         outcome_data: phenotype outcome data
     """
-    pass
+    with open(FLAGS.outcome) as outcome_file:
+        tsv_in = csv.reader(outcome_file, delimiter='\t')
 
 def main():
     """ Main body of the grn process. """
@@ -57,10 +58,10 @@ if __name__ == '__main__':
         help='expression data'
     )
     PARSER.add_argument(
-        '-p', '--phenotype',
+        '-o', '--outcome',
         type=str,
         default='',
-        help='phenotype data'
+        help='outcome data'
     )
     FLAGS, _ = PARSER.parse_known_args()
     main()

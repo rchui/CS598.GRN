@@ -1,3 +1,3 @@
 # CS598.GRN
 
-python3 grn.py -e data/genomicMatrix.txt -p data/clinical_data.txt
+python3 grn.py -e data/genomicMatrix.txt -o data/clinical_data.txt
