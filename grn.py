@@ -13,7 +13,7 @@ import numpy as np
 FLAGS = None
 
 def get_expression():
-    """ Reads in the data from file.
+    """ Reads in the expression data from file.
 
     Args:
         None
@@ -31,7 +31,15 @@ def get_expression():
     return expression_data, expression_names
 
 def get_outcome():
-    """""
+    """ Reads in the outcome data from file.
+
+    Args:
+        None
+
+    Returns:
+        outcome_data: phenotype outcome data
+    """
+    pass
 
 def main():
     """ Main body of the grn process. """
