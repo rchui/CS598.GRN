@@ -9,12 +9,43 @@ import copy
 import argparse
 import itertools
 import time
+from scipy import stats
 from sklearn import linear_model
 import numpy as np
 
 FLAGS = None
 OUTCOME = 'GLM'
 SAMPLES = 10
+
+class LinearRegression(linear_model.LinearRegression):
+    """
+    LinearRegression class after sklearn's, but calculate t-statistics
+    and p-values for model coefficients (betas).
+    Additional attributes available after .fit()
+    are `t` and `p` which are of the shape (y.shape[1], X.shape[1])
+    which is (n_features, n_coefs)
+    This class sets the intercept to 0 by default, since usually we include it
+    in X.
+    """
+
+    def __init__(self, *args, **kwargs):
+        if not "fit_intercept" in kwargs:
+            kwargs['fit_intercept'] = False
+        super(LinearRegression, self)\
+                .__init__(*args, **kwargs)
+
+    def fit(self, X, y, sample_weight=None):
+        self = super(LinearRegression, self).fit(X, y, sample_weight=None)
+
+        sse = np.sum((self.predict(X) - y) ** 2, axis=0) / float(X.shape[0] - X.shape[1])
+        se = np.array([
+            np.sqrt(np.diagonal(sse[i] * np.linalg.inv(np.dot(X.T, X))))
+                                                    for i in range(sse.shape[0])
+                    ])
+
+        self.t = self.coef_ / se
+        self.p = 2 * (1 - stats.t.cdf(np.abs(self.t), y.shape[0] - X.shape[1]))
+        return self
 
 def build_set():
     """ Builds a set of the samples in the expression data. """
@@ -77,6 +108,13 @@ def data_combinations(data_list):
             result = np.concatenate((result, [np.multiply(row_1, row_2)]))
     return result
 
+def timing(start_time):
+    start = start_time
+    end = time.time()
+    hours, rem = divmod(end-start, 3600)
+    minutes, seconds = divmod(rem, 60)
+    return "{:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds)
+
 def main():
     start_time = time.time()
     print()
@@ -84,7 +122,7 @@ def main():
     out_data = get_outcomes(sample_set)
     exp_data, exp_names = get_expression()
 
-    print('Data Ingested in %ss' % (time.time() - start_time), '\n')
+    print('%s - Data Ingested' % timing(start_time), '\n')
     # print(out_data, '\n')
     # print(exp_data, '\n')
     # print(exp_names, '\n')
@@ -93,9 +131,20 @@ def main():
     exp_names = name_combinations(exp_names)
     exp_data = data_combinations(exp_data)
 
-    print('Combinations Calculated in %ss' % (time.time() - start_time), '\n')
-    print(exp_names, '\n')
-    print(exp_data, '\n')
+    print('%s - Combinations Calculated' % timing(start_time), '\n')
+    # print(exp_names, '\n')
+    # print(exp_data, '\n')
+
+    iteration = 1
+    lin_reg = LinearRegression()
+    while True:
+        time.sleep(3)
+        if iteration == 1:
+            lin_reg.fit(np.transpose(np.asarray([exp_data[0]])), np.transpose(np.asarray([out_data])))
+        else:
+            pass
+        print('%s - Iteration ' % timing(start_time) + str(iteration) + ' Completed', '\n')
+        iteration += 1
 
 if __name__ == '__main__':
     PARSER = argparse.ArgumentParser()
