@@ -5,6 +5,7 @@ Main body of grn process.
 
 import sys
 import csv
+import math
 import copy
 import argparse
 import itertools
@@ -15,7 +16,8 @@ import numpy as np
 
 FLAGS = None
 OUTCOME = 'GLM'
-SAMPLES = 10
+SAMPLES = 50
+ALPHA = 0.05
 
 class LinearRegression(linear_model.LinearRegression):
     """
@@ -31,8 +33,7 @@ class LinearRegression(linear_model.LinearRegression):
     def __init__(self, *args, **kwargs):
         if not "fit_intercept" in kwargs:
             kwargs['fit_intercept'] = False
-        super(LinearRegression, self)\
-                .__init__(*args, **kwargs)
+        super(LinearRegression, self).__init__(*args, **kwargs)
 
     def fit(self, X, y, sample_weight=None):
         self = super(LinearRegression, self).fit(X, y, sample_weight=None)
@@ -40,12 +41,15 @@ class LinearRegression(linear_model.LinearRegression):
         sse = np.sum((self.predict(X) - y) ** 2, axis=0) / float(X.shape[0] - X.shape[1])
         se = np.array([
             np.sqrt(np.diagonal(sse[i] * np.linalg.inv(np.dot(X.T, X))))
-                                                    for i in range(sse.shape[0])
-                    ])
+            for i in range(sse.shape[0])
+            ])
 
         self.t = self.coef_ / se
         self.p = 2 * (1 - stats.t.cdf(np.abs(self.t), y.shape[0] - X.shape[1]))
         return self
+
+def print_log(start_time, title, message):
+    print('%s - ' % timing(start_time) + title + message, '\n')
 
 def build_set():
     """ Builds a set of the samples in the expression data. """
@@ -115,36 +119,148 @@ def timing(start_time):
     minutes, seconds = divmod(rem, 60)
     return "{:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds)
 
+def stepwise_regression(exp_data, out_data, start_time):
+    """ Performs stepwise regresion. """
+    iteration = 1
+    lin_reg = LinearRegression()
+    snp_set = set()
+    y = np.transpose(np.asarray([out_data]))
+    last_p = []
+    while True:
+        index_p = None
+        min_p = math.inf
+
+        if iteration == 1: # No backwards elimination
+            for i, row in enumerate(exp_data):
+                X = np.transpose(np.asarray([row]))
+                lin_reg.fit(X, y)
+                if lin_reg.p < min_p:
+                    min_p = lin_reg.p[0][0]
+                    index_p = i
+            if min_p > ALPHA:
+                break
+            else:
+                snp_set.add(index_p)
+        else: # Foward and backward step
+            x_indexes = []
+            x_values = []
+            chosen_p = []
+            size = len(snp_set)
+
+            # Collect indexes and values from snp_set
+            for index in snp_set:
+                x_indexes.append(index)
+                x_values.append(exp_data[index])
+
+            # Perform forward step
+            for i, row in enumerate(exp_data):
+                if i not in snp_set:
+                    x_values.append(row)
+                    X = np.transpose(np.asarray(x_values))
+                    lin_reg.fit(X, y)
+                    if lin_reg.p[0][-1] < min_p:
+                        chosen_p = lin_reg.p
+                        min_p = lin_reg.p[0][-1]
+                        index_p = i
+                    x_values = x_values[:-1]
+
+            # Check break condition with bonferonni corrected ALPHA
+            if min_p > ALPHA / size:
+                break
+            else: # Perform FDR backwards elimination
+                last_p = copy.deepcopy(chosen_p)
+                snp_set.add(index_p)
+                size = len(snp_set)
+                chosen_p = chosen_p[0][:-1]
+                chosen_p, x_indexes = (list(t) for t in zip(*sorted(zip(chosen_p, x_indexes))))
+                for i, p_value in enumerate(chosen_p):
+                    if p_value > i * ALPHA / size:
+                        x_indexes[i]
+                        snp_set.remove(x_indexes[i])
+        # print(min_p, snp_set)
+
+        print_log(start_time, 'Iteration %s' % str(iteration), ' - %s' % min_p + ' - %s' % len(snp_set))
+        iteration += 1
+    print_log(start_time, 'Iteration %s' % str(iteration), ' - %s' % min_p + ' - %s' % len(snp_set))
+    return snp_set, last_p[0]
+
+def build_adjacency(snp_set, last_p, exp_names):
+    """ Builds the adjacency graph. """
+    model_names = {}
+    name_position = {}
+    name_score = {}
+
+    # Gather the name corresponding position and score
+    # Build adjacency graph
+    for i, snp in enumerate(snp_set):
+        split_names = exp_names[snp].split('::')
+        name_position[split_names[0] + '::' + split_names[1]] = snp
+        name_position[split_names[1] + '::' + split_names[0]] = snp
+        name_score[split_names[0] + '::' + split_names[1]] = last_p[i]
+        name_score[split_names[1] + '::' + split_names[0]] = last_p[i]
+        for name_1 in split_names:
+            for name_2 in split_names:
+                if name_1 != name_2:
+                    if name_1 in model_names.keys():
+                        model_names[name_1].append((name_2, last_p[i]))
+                    else:
+                        model_names[name_1] = [(name_2, last_p[i])]
+    return model_names, name_position, name_score
+
+def dpi_elimination(model_names, name_position, name_score, snp_set):
+    first_list = model_names[OUTCOME]
+    first_name = OUTCOME
+    for second in first_list: # Check all first elements
+        second_list = model_names[second[0]]
+        second_name = second[0]
+        for third in second_list: # Check all second elements
+            third_list = model_names[third[0]]
+            third_name = third[0]
+            for fourth in third_list: # Check all third elements
+                fourth_name = fourth[0]
+                if first_name == fourth_name: # Check all fourth elements
+                    first_transition = first_name + '::' + second_name
+                    second_transition = second_name + '::' + third_name
+                    third_transition = third_name + '::' + fourth_name
+
+                    # Eliminate cycles by removing lowest of cycles
+                    if name_score[first_transition] > name_score[second_transition]:
+                        if name_score[second_transition] > name_score[third_transition]:
+                            snp_set.discard(name_position[third_transition])
+                        else:
+                            snp_set.discard(name_position[second_transition])
+                    else:
+                        if name_score[first_transition] > name_score[third_transition]:
+                            snp_set.discard(name_position[third_transition])
+                        else:
+                            snp_set.discard(name_position[first_transition])
+    return snp_set
+
 def main():
     start_time = time.time()
     print()
+
     sample_set = build_set()
+    print_log(start_time, 'Built Sample Set', '')
+
     out_data = get_outcomes(sample_set)
     exp_data, exp_names = get_expression()
-
-    print('%s - Data Ingested' % timing(start_time), '\n')
-    # print(out_data, '\n')
-    # print(exp_data, '\n')
-    # print(exp_names, '\n')
-    # print(len(out_data), len(exp_data[0]), len(exp_data), len(exp_names), '\n')
+    print_log(start_time, 'Data Ingested', '')
 
     exp_names = name_combinations(exp_names)
     exp_data = data_combinations(exp_data)
+    print_log(start_time, 'Combinations Calculated', '')
 
-    print('%s - Combinations Calculated' % timing(start_time), '\n')
-    # print(exp_names, '\n')
-    # print(exp_data, '\n')
+    snp_set, last_p = stepwise_regression(exp_data, out_data, start_time)
+    print_log(start_time, 'Finished Regression', ' - ' + str(len(snp_set)))
 
-    iteration = 1
-    lin_reg = LinearRegression()
-    while True:
-        time.sleep(3)
-        if iteration == 1:
-            lin_reg.fit(np.transpose(np.asarray([exp_data[0]])), np.transpose(np.asarray([out_data])))
-        else:
-            pass
-        print('%s - Iteration ' % timing(start_time) + str(iteration) + ' Completed', '\n')
-        iteration += 1
+    model_names, name_position, name_score = build_adjacency(snp_set, last_p, exp_names)
+    print_log(start_time, 'Built Adjacency Graph', '')
+
+    snp_set = dpi_elimination(model_names, name_score, name_position, snp_set)
+    print_log(start_time, 'Finished DPI Elimination', ' - ' + str(len(snp_set)))
+
+    print(snp_set, '\n')
 
 if __name__ == '__main__':
     PARSER = argparse.ArgumentParser()
