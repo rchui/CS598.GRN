@@ -3,7 +3,6 @@
 Main body of grn process.
 """
 
-import sys
 import csv
 import math
 import copy
@@ -49,6 +48,7 @@ class LinearRegression(linear_model.LinearRegression):
         return self
 
 def print_log(start_time, title, message):
+    """ Prints out a log of the current process. """
     print('%s - ' % timing(start_time) + title + message, '\n')
 
 def build_set():
@@ -113,11 +113,12 @@ def data_combinations(data_list):
     return result
 
 def timing(start_time):
+    """ Gets the current timing of the program. """
     start = start_time
     end = time.time()
     hours, rem = divmod(end-start, 3600)
     minutes, seconds = divmod(rem, 60)
-    return "{:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds)
+    return "{:0>2}:{:0>2}:{:05.2f}".format(int(hours), int(minutes), seconds)
 
 def stepwise_regression(exp_data, out_data, start_time):
     """ Performs stepwise regresion. """
@@ -207,6 +208,7 @@ def build_adjacency(snp_set, last_p, exp_names):
     return model_names, name_position, name_score
 
 def dpi_elimination(model_names, name_position, name_score, snp_set):
+    """ Uses the adjacency graph to eliminate cycles. """
     first_list = model_names[OUTCOME]
     first_name = OUTCOME
     for second in first_list: # Check all first elements
@@ -236,6 +238,7 @@ def dpi_elimination(model_names, name_position, name_score, snp_set):
     return snp_set
 
 def main():
+    """ Main body of grn.py. """
     start_time = time.time()
     print()
 
