@@ -16,7 +16,7 @@ import numpy as np
 
 FLAGS = None
 OUTCOME = 'GLM'
-SAMPLES = 50
+SAMPLES = 30
 ALPHA = 0.05
 
 class LinearRegression(linear_model.LinearRegression):
@@ -175,7 +175,6 @@ def stepwise_regression(exp_data, out_data, start_time):
                 chosen_p, x_indexes = (list(t) for t in zip(*sorted(zip(chosen_p, x_indexes))))
                 for i, p_value in enumerate(chosen_p):
                     if p_value > i * ALPHA / size:
-                        x_indexes[i]
                         snp_set.remove(x_indexes[i])
         # print(min_p, snp_set)
 
@@ -257,7 +256,7 @@ def main():
     model_names, name_position, name_score = build_adjacency(snp_set, last_p, exp_names)
     print_log(start_time, 'Built Adjacency Graph', '')
 
-    snp_set = dpi_elimination(model_names, name_score, name_position, snp_set)
+    snp_set = dpi_elimination(model_names, name_position, name_score, snp_set)
     print_log(start_time, 'Finished DPI Elimination', ' - ' + str(len(snp_set)))
 
     print(snp_set, '\n')
