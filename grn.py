@@ -9,13 +9,18 @@ import copy
 import argparse
 import itertools
 import time
+import nltk
 from scipy import stats
 from sklearn import linear_model
+from sklearn import cross_validation
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import KFold
+from sklearn import svm
 import numpy as np
 
 FLAGS = None
 OUTCOME = 'GLM'
-SAMPLES = 30
+SAMPLES = 10
 ALPHA = 0.05
 
 class LinearRegression(linear_model.LinearRegression):
@@ -72,7 +77,7 @@ def get_expression():
     exp_data = None
     with open(FLAGS.expression) as exp_file:
         tsv_in = csv.reader(exp_file, delimiter='\t')
-        tsv_in = itertools.islice(tsv_in, SAMPLES)
+        tsv_in = itertools.islice(tsv_in, SAMPLES + 1)
 
         # For each element in the CSV set all elements 'NA' to 0.
         exp_data = np.asarray([['0' if element == 'NA' else element for element in row] for row in tsv_in])
@@ -129,7 +134,7 @@ def stepwise_regression(exp_data, out_data, start_time):
     last_p = []
     while True:
         index_p = None
-        min_p = math.inf
+        min_p = 1000000
 
         if iteration == 1: # No backwards elimination
             for i, row in enumerate(exp_data):
@@ -245,24 +250,58 @@ def main():
     sample_set = build_set()
     print_log(start_time, 'Built Sample Set', '')
 
+    #clf = sklearn.naive_bayes.GaussianNB()
+
+    #kf = cross_validation.KFold(n_folds = 10)
+    #sum = 0
+
+    #for train, test in kf:
+    #    print ('TRAIN:', train, 'TEST:', test)
+
+        #train_data = sample_set(train)
+        #test_data = sample_set(test)
+
+    kf = KFold(n_splits = 2)
+
+    #for train, test in kf.split(get_expression()):
+        #print ('TRAIN:', train, 'TEST:', test)
+
     out_data = get_outcomes(sample_set)
     exp_data, exp_names = get_expression()
     print_log(start_time, 'Data Ingested', '')
 
-    exp_names = name_combinations(exp_names)
-    exp_data = data_combinations(exp_data)
-    print_log(start_time, 'Combinations Calculated', '')
+    print ('exp_names:', exp_names, '\n exp_data', exp_data)
+    print ('length of exp_names:', str(len(exp_names)))
+    print ('length of exp_data:', str(len(exp_data)))
 
-    snp_set, last_p = stepwise_regression(exp_data, out_data, start_time)
-    print_log(start_time, 'Finished Regression', ' - ' + str(len(snp_set)))
+    for train, test in kf.split(exp_data, exp_names):
+        print ('TRAIN:', train, 'TEST:', test)
+        exp_names = name_combinations(exp_names)
+        exp_data = data_combinations(exp_data)
 
-    model_names, name_position, name_score = build_adjacency(snp_set, last_p, exp_names)
-    print_log(start_time, 'Built Adjacency Graph', '')
+        print ('exp_names:', exp_names, '\n exp_data', exp_data)
+        print ('length of exp_names:', str(len(exp_names)))
+        print ('length of exp_data:', str(len(exp_data)))
 
-    snp_set = dpi_elimination(model_names, name_position, name_score, snp_set)
-    print_log(start_time, 'Finished DPI Elimination', ' - ' + str(len(snp_set)))
+        print_log(start_time, 'Combinations Calculated', '')
 
-    print(snp_set, '\n')
+        snp_set, last_p = stepwise_regression(exp_data, out_data, start_time)
+        print_log(start_time, 'Finished Regression', ' - ' + str(len(snp_set)))
+        print ('snp_set', snp_set, '\n')
+
+        model_names, name_position, name_score = build_adjacency(snp_set, last_p, exp_names)
+        print_log(start_time, 'Built Adjacency Graph', '')
+
+        snp_set = dpi_elimination(model_names, name_position, name_score, snp_set)
+        print_log(start_time, 'Finished DPI Elimination', ' - ' + str(len(snp_set)))
+
+        #clf = nltk.NaiveBayesClassifier.train(train_data)
+        #clf.fit(train[train_data], test[train_data].predict_proba(train[test_data])
+        #sum = sum + nltk.classifier.accuracy(clf, test_data)
+
+        print(snp_set, '\n')
+
+    #print_log(start_time, 'Average Accuracy', '-' + sum/10)
 
 if __name__ == '__main__':
     PARSER = argparse.ArgumentParser()
