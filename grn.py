@@ -9,7 +9,7 @@ import copy
 import argparse
 import itertools
 import time
-import nltk
+# import nltk
 from scipy import stats
 from sklearn import linear_model
 from sklearn import cross_validation
@@ -20,7 +20,7 @@ import numpy as np
 
 FLAGS = None
 OUTCOME = 'GLM'
-SAMPLES = 10
+SNPS = 10
 ALPHA = 0.05
 
 class LinearRegression(linear_model.LinearRegression):
@@ -77,7 +77,7 @@ def get_expression():
     exp_data = None
     with open(FLAGS.expression) as exp_file:
         tsv_in = csv.reader(exp_file, delimiter='\t')
-        tsv_in = itertools.islice(tsv_in, SAMPLES + 1)
+        tsv_in = itertools.islice(tsv_in, SNPS + 1)
 
         # For each element in the CSV set all elements 'NA' to 0.
         exp_data = np.asarray([['0' if element == 'NA' else element for element in row] for row in tsv_in])
