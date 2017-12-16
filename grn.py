@@ -12,9 +12,10 @@ import time
 # import nltk
 from scipy import stats
 from sklearn import linear_model
-from sklearn import cross_validation
-from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import KFold
+#from sklearn import cross_validation
+#from sklearn.model_selection import cross_val_score
+#from sklearn.model_selection import KFold
+from sklearn.svm import SVC
 from sklearn import svm
 import numpy as np
 
@@ -250,44 +251,40 @@ def main():
     sample_set = build_set()
     print_log(start_time, 'Built Sample Set', '')
 
-    #clf = sklearn.naive_bayes.GaussianNB()
-
-    #kf = cross_validation.KFold(n_folds = 10)
-    #sum = 0
-
-    #for train, test in kf:
-    #    print ('TRAIN:', train, 'TEST:', test)
-
-        #train_data = sample_set(train)
-        #test_data = sample_set(test)
-
-    kf = KFold(n_splits = 2)
-
-    #for train, test in kf.split(get_expression()):
-        #print ('TRAIN:', train, 'TEST:', test)
-
     out_data = get_outcomes(sample_set)
     exp_data, exp_names = get_expression()
     print_log(start_time, 'Data Ingested', '')
 
-    print ('exp_names:', exp_names, '\n exp_data', exp_data)
-    print ('length of exp_names:', str(len(exp_names)))
-    print ('length of exp_data:', str(len(exp_data)))
+    exp_names = name_combinations(exp_names)
+    exp_data = data_combinations(exp_data)
+    print_log(start_time, 'Combinations Calculated', '')
 
-    for train, test in kf.split(exp_data, exp_names):
-        print ('TRAIN:', train, 'TEST:', test)
-        exp_names = name_combinations(exp_names)
-        exp_data = data_combinations(exp_data)
+    expdata_folds = np.hsplit(exp_data, 7)
+    #expdata_folds = np.array_split(exp_data, 7)
+    outdata_folds = np.array_split(out_data, 7)
+    scores = list()
 
-        print ('exp_names:', exp_names, '\n exp_data', exp_data)
-        print ('length of exp_names:', str(len(exp_names)))
-        print ('length of exp_data:', str(len(exp_data)))
+    for k in range(7):
+        expdata_train = list(expdata_folds)
+        expdata_test = expdata_train.pop(k)
+        expdata_train = np.concatenate(expdata_train, axis = 1)
 
-        print_log(start_time, 'Combinations Calculated', '')
+        outdata_train = list(outdata_folds)
+        outdata_test = outdata_train.pop(k)
+        outdata_train = np.concatenate(outdata_train)
 
-        snp_set, last_p = stepwise_regression(exp_data, out_data, start_time)
+        #print ('expdata_train: \n', expdata_train)
+        #print ('exp_data: \n', np.matrix(exp_data))
+
+        print ('expdata_train dimensions:', expdata_train.shape)
+        print ('exp_data dimensions:', exp_data.shape)
+
+        print ('outdata_train dimensions:', outdata_train.shape, '\n')
+        #print ('out_data dimensions:', out_data.shape, '\n')
+
+        snp_set, last_p = stepwise_regression(expdata_train, outdata_train, start_time)
+        #snp_set, last_p = stepwise_regression(exp_data, out_data, start_time)
         print_log(start_time, 'Finished Regression', ' - ' + str(len(snp_set)))
-        print ('snp_set', snp_set, '\n')
 
         model_names, name_position, name_score = build_adjacency(snp_set, last_p, exp_names)
         print_log(start_time, 'Built Adjacency Graph', '')
@@ -295,13 +292,16 @@ def main():
         snp_set = dpi_elimination(model_names, name_position, name_score, snp_set)
         print_log(start_time, 'Finished DPI Elimination', ' - ' + str(len(snp_set)))
 
-        #clf = nltk.NaiveBayesClassifier.train(train_data)
-        #clf.fit(train[train_data], test[train_data].predict_proba(train[test_data])
-        #sum = sum + nltk.classifier.accuracy(clf, test_data)
-
         print(snp_set, '\n')
 
-    #print_log(start_time, 'Average Accuracy', '-' + sum/10)
+        clf = svm.SVC(kernel = 'linear', C = 1).fit(np.transpose(expdata_train), outdata_train)
+	#print(snp_set.shape)
+        accuracy_score = clf.score(np.transpose(expdata_test), outdata_test)
+
+        scores.append(accuracy_score)
+        print('Accuracy Scores:', scores, '\n')
+
+    print('Average Accuracy: ', sum(scores)/len(scores))
 
 if __name__ == '__main__':
     PARSER = argparse.ArgumentParser()
