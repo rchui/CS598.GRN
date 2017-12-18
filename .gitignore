@@ -104,3 +104,5 @@ ENV/
 *.txt
 
 *.swp
+clinical_data
+genomicMatrix

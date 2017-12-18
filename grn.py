@@ -3,6 +3,7 @@
 Main body of grn process.
 """
 
+import sys
 import csv
 import math
 import copy
@@ -10,6 +11,7 @@ import argparse
 import itertools
 import time
 # import nltk
+from random import randint
 from scipy import stats
 from sklearn import linear_model
 #from sklearn import cross_validation
@@ -20,8 +22,9 @@ from sklearn import svm
 import numpy as np
 
 FLAGS = None
-OUTCOME = 'GLM'
-SNPS = 10
+OUTCOME = 'BRCA1'
+TYPE = 'glioblastoma multiforme'
+GENES = 20
 ALPHA = 0.05
 
 class LinearRegression(linear_model.LinearRegression):
@@ -70,7 +73,7 @@ def get_outcomes(sample_set):
     with open(FLAGS.outcome) as out_file:
         # For every row in the outcome file, check if the sample is in sample_set
         # If the cancer is glioblastoma multiforme set to 1 else set to 0
-        out_data = [1 if row[18] == 'glioblastoma multiforme' else 0 for row in csv.reader(out_file, delimiter='\t') if row[0] in sample_set]
+        out_data = [1 if row[18] == TYPE else 0 for row in csv.reader(out_file, delimiter='\t') if row[0] in sample_set]
     return np.asarray(out_data)
 
 def get_expression():
@@ -78,10 +81,10 @@ def get_expression():
     exp_data = None
     with open(FLAGS.expression) as exp_file:
         tsv_in = csv.reader(exp_file, delimiter='\t')
-        tsv_in = itertools.islice(tsv_in, SNPS + 1)
+        tsv_in = itertools.islice(tsv_in, GENES + 1)
 
         # For each element in the CSV set all elements 'NA' to 0.
-        exp_data = np.asarray([['0' if element == 'NA' else element for element in row] for row in tsv_in])
+        exp_data = np.asarray([['0' if element == 'NA' else element for element in row] for row in tsv_in if '?' not in row[0]])
         exp_samples = exp_data[0][1:]
         # Remove the sample names
         exp_data = exp_data[1:]
@@ -97,7 +100,13 @@ def get_expression():
             exp_data_out.append(row[:-1])
         exp_data_out = np.asarray(exp_data_out)
 
-        return exp_data_out, exp_names
+    with open(FLAGS.expression) as exp_file:
+        tsv_in = csv.reader(exp_file, delimiter='\t')
+        for row in tsv_in:
+            if row[0] == OUTCOME:
+                out_data = row[1:][:-1]
+    out_data = np.asarray(out_data).astype(float)
+    return exp_data_out, exp_names, out_data
 
 def name_combinations(name_list):
     """ Compute name combinations. """
@@ -129,7 +138,7 @@ def timing(start_time):
 def stepwise_regression(exp_data, out_data, start_time):
     """ Performs stepwise regresion. """
     iteration = 1
-    lin_reg = LinearRegression()
+    lin_reg = LinearRegression(n_jobs=-1)
     snp_set = set()
     y = np.transpose(np.asarray([out_data]))
     last_p = []
@@ -170,20 +179,22 @@ def stepwise_regression(exp_data, out_data, start_time):
                         min_p = lin_reg.p[0][-1]
                         index_p = i
                     x_values = x_values[:-1]
-
+            print(chosen_p)
             # Check break condition with bonferonni corrected ALPHA
             if min_p > ALPHA / size:
                 break
             else: # Perform FDR backwards elimination
                 last_p = copy.deepcopy(chosen_p)
                 snp_set.add(index_p)
-                size = len(snp_set)
-                chosen_p = chosen_p[0][:-1]
-                chosen_p, x_indexes = (list(t) for t in zip(*sorted(zip(chosen_p, x_indexes))))
-                for i, p_value in enumerate(chosen_p):
-                    if p_value > i * ALPHA / size:
-                        snp_set.remove(x_indexes[i])
-        # print(min_p, snp_set)
+                if randint(0, 9) != 0:
+                    print(snp_set, '\n')
+                    size = len(snp_set)
+                    chosen_p = chosen_p[0][:-1]
+                    chosen_p, x_indexes = (list(t) for t in zip(*sorted(zip(chosen_p, x_indexes))))
+                    for i, p_value in enumerate(chosen_p):
+                        if p_value > i + 1 * ALPHA / size:
+                            snp_set.remove(x_indexes[i])
+        print(min_p, snp_set)
 
         print_log(start_time, 'Iteration %s' % str(iteration), ' - %s' % min_p + ' - %s' % len(snp_set))
         iteration += 1
@@ -243,6 +254,20 @@ def dpi_elimination(model_names, name_position, name_score, snp_set):
                             snp_set.discard(name_position[first_transition])
     return snp_set
 
+def shuffle_in_unison(exp_data, out_data):
+    """ Shuffle out_data and exp_data in unison. """
+    exp_data = np.transpose(exp_data)
+
+    assert len(out_data) == len(exp_data)
+    permute = np.random.permutation(len(out_data))
+    out_data = out_data[permute]
+    exp_data = exp_data[permute]
+
+    assert len(out_data) == len(exp_data)
+    exp_data = np.transpose(exp_data)
+
+    return exp_data, out_data
+
 def main():
     """ Main body of grn.py. """
     start_time = time.time()
@@ -251,18 +276,27 @@ def main():
     sample_set = build_set()
     print_log(start_time, 'Built Sample Set', '')
 
-    out_data = get_outcomes(sample_set)
-    exp_data, exp_names = get_expression()
+    # out_data = get_outcomes(sample_set)
+    exp_data, exp_names, out_data = get_expression()
+    # print(len(out_data))
+    # print(len(exp_data[0]))
+    # print(len(exp_names))
+    # out_data = [row[0] for row in exp_data]
+    # print(len(out_data), out_data)
+    # print(len(out_data2), out_data2)
+    # sys.exit()
     print_log(start_time, 'Data Ingested', '')
 
-    exp_names = name_combinations(exp_names)
-    exp_data = data_combinations(exp_data)
-    print_log(start_time, 'Combinations Calculated', '')
+    # exp_names = name_combinations(exp_names)
+    # exp_data = data_combinations(exp_data)
+    # print_log(start_time, 'Combinations Calculated', '')
+
+    exp_data, out_data = shuffle_in_unison(exp_data, out_data)
 
     expdata_folds = np.hsplit(exp_data, 7)
     #expdata_folds = np.array_split(exp_data, 7)
     outdata_folds = np.array_split(out_data, 7)
-    scores = list()
+    scores = []
 
     for k in range(7):
         expdata_train = list(expdata_folds)
@@ -286,22 +320,41 @@ def main():
         #snp_set, last_p = stepwise_regression(exp_data, out_data, start_time)
         print_log(start_time, 'Finished Regression', ' - ' + str(len(snp_set)))
 
-        model_names, name_position, name_score = build_adjacency(snp_set, last_p, exp_names)
-        print_log(start_time, 'Built Adjacency Graph', '')
+        # model_names, name_position, name_score = build_adjacency(snp_set, last_p, exp_names)
+        # print_log(start_time, 'Built Adjacency Graph', '')
 
-        snp_set = dpi_elimination(model_names, name_position, name_score, snp_set)
-        print_log(start_time, 'Finished DPI Elimination', ' - ' + str(len(snp_set)))
+        # snp_set = dpi_elimination(model_names, name_position, name_score, snp_set)
+        # print_log(start_time, 'Finished DPI Elimination', ' - ' + str(len(snp_set)))
 
         print(snp_set, '\n')
 
-        clf = svm.SVC(kernel = 'linear', C = 1).fit(np.transpose(expdata_train), outdata_train)
-	#print(snp_set.shape)
-        accuracy_score = clf.score(np.transpose(expdata_test), outdata_test)
+        x_train = []
+        x_test = []
+        for snp in snp_set:
+            snp_index = int(snp)
+            x_train.append(expdata_train[snp_index])
+            x_test.append(expdata_test[snp_index])
+        X_train = np.transpose(np.asarray(x_train))
+        X_test = np.transpose(np.asarray(x_test))
+        y_train = np.transpose(np.asarray([outdata_train]))
+        lin_reg = LinearRegression()
+        lin_reg.fit(X_train, y_train)
+        predictions = lin_reg.predict(X_test)
+        sum_ = 0
+        for prediction, outcome in zip(predictions, outdata_test):
+            sum_ += (prediction - outcome) ** 2
+        accuracy_score = (sum_ / len(predictions))
+
+        # clf = svm.SVC(kernel = 'linear', C = 1).fit(np.transpose(expdata_train), outdata_train)
+	    # print(snp_set.shape)
+        # accuracy_score = clf.score(np.transpose(expdata_test), outdata_test)
 
         scores.append(accuracy_score)
-        print('Accuracy Scores:', scores, '\n')
+    print('Accuracy Scores:', scores, '\n')
 
-    print('Average Accuracy: ', sum(scores)/len(scores))
+    sum_ = sum(scores)
+    length = len(scores)
+    print('Average Accuracy:', sum_ / length)
 
 if __name__ == '__main__':
     PARSER = argparse.ArgumentParser()
